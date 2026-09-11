@@ -1,4 +1,5 @@
 import asyncio
+import re
 from typing import Dict, Union
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
@@ -16,6 +17,20 @@ PRESET_LOCATIONS = {
     "great barrier reef": {"lat": -18.2871, "lon": 147.6992},
     "north sea": {"lat": 56.0, "lon": 3.0}
 }
+
+def extract_location_from_text(text: str) -> str | None:
+    """Extract known coastal locations embedded in query text."""
+    t_lower = text.lower()
+    for preset in sorted(PRESET_LOCATIONS.keys(), key=lambda x: -len(x)):
+        if preset in t_lower:
+            return preset.title()
+    # Check common prepositions: near <location>, in <location>, around <location>, off <location>
+    matches = re.findall(r'(?:near|in|at|off|around|from)\s+([A-Za-z\s]+?)(?:\s+(?:coast|next|this|today|tomorrow|\?|\.|$))', text, re.IGNORECASE)
+    if matches:
+        candidate = matches[0].strip()
+        if len(candidate) > 2:
+            return candidate.title()
+    return None
 
 async def resolve_location(name: str) -> Dict[str, Union[str, float]]:
     """

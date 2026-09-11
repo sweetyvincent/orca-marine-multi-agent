@@ -6,7 +6,7 @@ from langgraph.config import get_stream_writer
 
 from router import route_question
 from synthesizer import compute_hab_risk, synthesize_answer
-from geocoding import resolve_location
+from geocoding import resolve_location, extract_location_from_text
 from agents import run_sst_agent, run_chlorophyll_agent, run_fisheries_agent
 
 logger = logging.getLogger(__name__)
@@ -26,12 +26,16 @@ class OrcaState(TypedDict):
     error: str
 
 async def geocode_node(state: OrcaState):
-    """Resolve location name to lat/lon coordinates."""
+    """Resolve location name to lat/lon coordinates, extracting from question if present."""
     writer = get_stream_writer()
-    location_name = state.get("location_name", "")
-    writer({"type": "geocode", "status": "running", "data": {"location": location_name}})
+    
+    # Priority: If question mentions a specific location (e.g. "Gulf of Mexico"), prefer that
+    extracted = extract_location_from_text(state.get("question", ""))
+    target_location = extracted if extracted else state.get("location_name", "Chennai")
+    
+    writer({"type": "geocode", "status": "running", "data": {"location": target_location}})
     try:
-        result = await resolve_location(location_name)
+        result = await resolve_location(target_location)
         lat = result["lat"]
         lon = result["lon"]
         resolved_name = result["name"]
@@ -40,7 +44,7 @@ async def geocode_node(state: OrcaState):
     except Exception as e:
         logger.error(f"Geocoding failed: {e}")
         writer({"type": "geocode", "status": "error", "data": {"error": str(e)}})
-        return {"error": f"Could not resolve location '{location_name}': {str(e)}"}
+        return {"error": f"Could not resolve location '{target_location}': {str(e)}"}
 
 async def router_node(state: OrcaState):
     """Decide which specialist agents to consult."""
@@ -123,8 +127,6 @@ async def synthesizer_node(state: OrcaState):
     }})
     return {"final_answer": final_answer, "risk_level": risk_level}
 
-# Build sequential pipeline graph where specialists feed forward smoothly:
-# START -> geocode -> router -> sst -> chlorophyll -> fisheries -> synthesizer -> END
 builder = StateGraph(OrcaState)
 builder.add_node("geocode_node", geocode_node)
 builder.add_node("router_node", router_node)

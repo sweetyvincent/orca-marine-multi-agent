@@ -50,18 +50,35 @@ def compute_hab_risk(agent_results: list[dict]) -> tuple[str, list[str]]:
     return risk_level, contributing_factors
 
 def format_domain_synthesis(location_name: str, agent_results: list[dict], risk_level: str, contributing_factors: list[str]) -> str:
-    """Produces a clean, highly structured marine report even when offline or without external LLM keys."""
+    """Produces a clean, highly structured marine report answering precisely what was queried."""
     sst_info = next((r for r in agent_results if r.get("agent") == "sst" and "error" not in r), None)
     chl_info = next((r for r in agent_results if r.get("agent") == "chlorophyll" and "error" not in r), None)
     fish_info = next((r for r in agent_results if r.get("agent") == "fisheries" and "error" not in r), None)
 
     paragraphs = []
     
-    # 1. Primary findings
+    # Single agent: Only SST queried
+    if sst_info and not chl_info:
+        paragraphs.append(
+            f"The Sea Surface Temperature (SST) near **{location_name}** is currently **{sst_info.get('current_sst_c')}°C**, "
+            f"reflecting an anomaly of **{'+' if sst_info.get('anomaly_c', 0) >= 0 else ''}{sst_info.get('anomaly_c')}°C** "
+            f"against climatological normal (7-day trend: *{sst_info.get('trend_direction')}*, {sst_info.get('trend_7day_c_per_week')}°C/week; source: {sst_info.get('data_source')})."
+        )
+        return "\n\n".join(paragraphs)
+
+    # Single agent: Only Chlorophyll queried
+    if chl_info and not sst_info:
+        paragraphs.append(
+            f"Satellite ocean color registers mean chlorophyll-a concentration near **{location_name}** at **{chl_info.get('mean_chl_mg_m3')} mg/m³** "
+            f"(classification: *{chl_info.get('classification')}*, peak reading: {chl_info.get('max_chl_mg_m3')} mg/m³; source: {chl_info.get('data_source')})."
+        )
+        return "\n\n".join(paragraphs)
+
+    # Multi-agent / Compound HAB query
     obs_summary = []
     if sst_info:
         obs_summary.append(
-            f"The Sea Surface Temperature (SST) near {location_name} is currently **{sst_info.get('current_sst_c')}°C**, "
+            f"The Sea Surface Temperature (SST) near **{location_name}** is currently **{sst_info.get('current_sst_c')}°C**, "
             f"reflecting an anomaly of **{'+' if sst_info.get('anomaly_c', 0) >= 0 else ''}{sst_info.get('anomaly_c')}°C** "
             f"against climatological normal (7-day trend: *{sst_info.get('trend_direction')}*, {sst_info.get('trend_7day_c_per_week')}°C/week; source: {sst_info.get('data_source')})."
         )
@@ -74,7 +91,6 @@ def format_domain_synthesis(location_name: str, agent_results: list[dict], risk_
     if obs_summary:
         paragraphs.append(" ".join(obs_summary))
 
-    # 2. Risk verdict & Advisory
     if fish_info or (sst_info and chl_info):
         badge = risk_level.upper()
         adv_text = fish_info.get('advisory') if fish_info else "Conditions do not indicate immediate bloom progression."
@@ -108,6 +124,7 @@ async def synthesize_answer(
 specialist agents, write a clear, grounded answer to the user's question.
 
 RULES:
+- Answer ONLY what the user asked. If they only asked for chlorophyll, report chlorophyll. If they asked for temperature, report temperature. If they asked for bloom risk or HAB, synthesize across all sources.
 - Cite specific numbers from the agent data (e.g., "SST is 29.4°C, +1.8°C above normal")
 - Name the data source for each fact (e.g., "according to NOAA OISST v2.1")
 - If this is a HAB risk assessment, clearly state the risk level and which factors drive it

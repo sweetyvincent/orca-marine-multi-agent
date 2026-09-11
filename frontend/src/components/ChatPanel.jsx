@@ -4,10 +4,10 @@ import MessageBubble from './MessageBubble';
 import LocationPicker from './LocationPicker';
 
 const PRESET_QUESTIONS = [
-  "What's the current SST near Chennai coast?",
-  "What are chlorophyll levels in the Gulf of Mexico?",
-  "Will conditions favour a harmful algal bloom near Florida Keys next week?",
-  "Is it safe to harvest shellfish from Chesapeake Bay?"
+  { text: "What's the current SST near Chennai coast?", loc: "Chennai" },
+  { text: "What are chlorophyll levels in the Gulf of Mexico?", loc: "Gulf of Mexico" },
+  { text: "Will conditions favour a harmful algal bloom near Florida Keys next week?", loc: "Florida Keys" },
+  { text: "Is it safe to harvest shellfish from Chesapeake Bay?", loc: "Chesapeake Bay" }
 ];
 
 export default function ChatPanel({ messages, onSend, isStreaming }) {
@@ -30,9 +30,10 @@ export default function ChatPanel({ messages, onSend, isStreaming }) {
     setInput('');
   };
 
-  const handleChipClick = (question) => {
+  const handleChipClick = (item) => {
     if (isStreaming) return;
-    onSend(question, location);
+    setLocation(item.loc);
+    onSend(item.text, item.loc);
   };
 
   return (
@@ -55,13 +56,13 @@ export default function ChatPanel({ messages, onSend, isStreaming }) {
       <div className="p-4 bg-ocean-900/80 border-t border-ocean-700/50 backdrop-blur-md">
         {messages.length === 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
-            {PRESET_QUESTIONS.map((q, idx) => (
+            {PRESET_QUESTIONS.map((item, idx) => (
               <button 
                 key={idx} 
-                onClick={() => handleChipClick(q)}
+                onClick={() => handleChipClick(item)}
                 className="text-xs bg-ocean-800/50 hover:bg-ocean-700/80 text-ocean-200 border border-ocean-700/50 rounded-full px-3 py-1.5 transition-colors"
               >
-                {q}
+                {item.text}
               </button>
             ))}
           </div>
