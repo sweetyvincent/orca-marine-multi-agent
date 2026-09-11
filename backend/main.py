@@ -3,9 +3,11 @@ import os
 import json
 import asyncio
 import logging
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -25,7 +27,7 @@ app = FastAPI(title="ORCA - Marine Multi-Agent System")
 # CORS for frontend dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,19 +59,16 @@ async def stream_orca_response(question: str, location: str):
             initial_state, 
             stream_mode=["updates", "custom"]
         ):
-            # LangGraph streams tuples of (stream_mode, data) when using multiple modes
             if isinstance(event, tuple) and len(event) == 2:
                 mode, data = event
             else:
                 continue
             
             if mode == "custom":
-                # Custom events from get_stream_writer() in nodes
                 event_type = data.get("type", "unknown")
                 status = data.get("status", "unknown")
                 event_data = data.get("data", {})
                 
-                # Map internal types to SSE event names
                 if status == "complete":
                     if event_type == "router":
                         sse_type = "router"
@@ -88,7 +87,6 @@ async def stream_orca_response(question: str, location: str):
                     yield f"event: status\ndata: {json.dumps({'agent': event_type, 'status': 'running'})}\n\n"
                     
             elif mode == "updates":
-                # Node completion updates — we use custom events instead
                 pass
                     
         yield f"event: done\ndata: {json.dumps({'status': 'completed'})}\n\n"
@@ -122,6 +120,19 @@ def locations():
     ]
     return {"locations": location_list}
 
+# Serve frontend build artifacts if present (for single-service deployment on Render, Railway, etc.)
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static_assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        file_path = FRONTEND_DIST / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
