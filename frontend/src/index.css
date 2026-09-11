@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ocean-950 text-gray-100 font-sans antialiased;
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-ocean-900; }
+  ::-webkit-scrollbar-thumb { @apply bg-ocean-600 rounded-full; }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-ocean-900/50 backdrop-blur-sm border border-ocean-700/30 rounded-xl;
+  }
+}
